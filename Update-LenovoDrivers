@@ -1,0 +1,94 @@
+function Install-LenovoDrivers {
+    [CmdletBinding()]
+    param ()
+    $CompSystem = Get-WmiObject -Class Win32_ComputerSystem
+
+    If($CompSystem.Manufacturer -like "*LENOVO*"){
+        Write-Output "[$((Get-Date).TimeofDay)] [Info] Found Lenovo Device."
+    }Else{
+        Write-Output "[$((Get-Date).TimeofDay)] [Info] Not a Lenovo Device. Will terminate"
+        Return "Not a Lenovo Device"
+    }
+
+    $lsu = Get-Module -ListAvailable | Where-Object { $_.Name -like 'LSUClient*' }
+
+    If($lsu){
+        Write-Output "[$((Get-Date).TimeofDay)] [Info] Found LSUClient modules."
+                try {
+            Write-Output "[$((Get-Date).TimeofDay)] [Info] LSUClient module is not available will import it."
+            Import-Module LSUClient -Global -Force -PassThru 
+        }
+        catch {
+            Write-Output "[$((Get-Date).TimeofDay)] [ERROR] Error. LSUClient did not import."
+            Throw "Error importing LSUClient"
+        }
+    }Else{
+
+         try {
+            Write-Output "[$((Get-Date).TimeofDay)] [Info] LSUClient module is not available will install and import it."
+            Install-Module -Name LSUClient -Scope AllUsers -Force
+            Import-Module LSUClient -Global -Force -PassThru 
+        }
+        catch {
+            Write-Output "[$((Get-Date).TimeofDay)] [ERROR] Error. LSUClient did not install or import correctly."
+            Throw "Error importing LSUClient"
+        }
+    }
+
+    $OutputTable = @()
+
+    $MaxRounds = 3
+    for ($Round = 1; $Round -le $MaxRounds; $Round++) {
+        Write-Output "[$((Get-Date).TimeofDay)] [Info] Starting round update $Round"
+        $updates = Get-LSUpdate -all | Where-Object { $_.Installer.Unattended -and $_.type -notlike "*Bios*" -and $_.IsApplicable -and -not $_.IsInstalled }
+        Write-Output "[$((Get-Date).TimeofDay)] [Info] $($updates.Count) updates found"
+
+
+        if ($updates.Count -eq 0) {
+            break;
+        }
+
+        $updates | Save-LSUpdate -Verbose -ShowProgress
+        $i = 1
+        foreach ($update in $updates) {
+            Write-Output "[$((Get-Date).TimeofDay)] [Info] Installing update $i of $($updates.Count): $($update.Title)"
+            $i++
+            Install-LSUpdate -Package $update -Verbose -OutVariable var
+            $Obj=New-Object PSObject
+            $Obj | Add-Member -Name "ID" -MemberType NoteProperty  -Value $var.Id
+            $Obj | Add-Member -Name "Success" -MemberType NoteProperty  -Value $var.Success
+            $Obj | Add-Member -Name "PendingAction" -MemberType NoteProperty  -Value $var.PendingAction
+            $Obj | Add-Member -Name "Title" -MemberType NoteProperty  -Value $var.Title
+            $OutputTable += $obj
+            
+        }
+        
+    }
+
+    $OutputTable
+    if($null -eq $OutputTable){
+    Write-Output "[$((Get-Date).TimeofDay)] [ERROR] No Output from module."
+    }else{
+    Write-Output "[$((Get-Date).TimeofDay)] [Info] Attempted to Install $($OutputTable.id.Count) updates"
+    }
+
+    If($null -eq $OutputTable){
+        Write-Output "[$((Get-Date).TimeofDay)] [ERROR] No output from LSUpdate."
+      }elseif($OutputTable.PendingAction -like "Reboot_suggested"){
+        Write-Output "[$((Get-Date).TimeofDay)] [Info] Updated Lenovo Drivers. A reboot is suggested."
+        Return "Updated Lenovo Drivers. A reboot is suggested."
+      }else{
+        Write-Output "[$((Get-Date).TimeofDay)] [Info] Updated Lenovo Drivers. A reboot is NOT suggested."
+        Return "A reboot is NOT suggested."
+      }
+}
+
+#---------------------------------[ Install Lenovo Drivers ]---------------------------------
+try {
+    Write-Output "[$((Get-Date).TimeofDay)] [INFO] Attempting to install Lenovo Drivers."
+    Install-LenovoDrivers -ErrorAction Continue
+    Write-Output "[$((Get-Date).TimeofDay)] [INFO] Lenovo Drivers installed successfully."
+}
+catch {
+    Write-Output "[$((Get-Date).TimeofDay)] [ERROR] Installing Lenovo Drivers Failed. $_"
+}
