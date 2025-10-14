@@ -47,7 +47,7 @@ Function Install-Nuget{
           Exit 70002
         }
     }
-
+}
 
 
 
@@ -284,4 +284,5 @@ try {
     <#Do this if a terminating exception happens#>
     write-Output "[$((Get-Date).TimeofDay)] [ERROR] Installing Winget Apps Failed"
 }
+
 
