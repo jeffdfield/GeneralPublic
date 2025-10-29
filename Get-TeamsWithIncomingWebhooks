@@ -53,7 +53,9 @@ $30MinFromNow = $Now.AddMinutes(30)
 $table = @()
 
 $AllTeams = Get-MgBetaTeam -PageSize 999
-Write-Output "[$((Get-Date).TimeofDay)] [INFO] There are $($AllTeams.count) teams to process."
+
+$AllTeams = Get-MgBetaTeam -TeamId "03d72b58-a521-47f9-81fd-f258442c345a"
+Write-Output "[$((Get-Date).TimeofDay)] [INFO] There are $($AllTeams.count) teams to proce03d72b58-a521-47f9-81fd-f258442c345ass."
 [int]$teamCount = $AllTeams.count
 
 
@@ -80,9 +82,17 @@ Foreach ($team in $AllTeams) {
     $Obj = New-Object PSObject
 
 
-    $InstalledTeamApps = Get-MgBetaTeamInstalledApp -TeamId $teamId -Property "*" -ExpandProperty "teamsAppDefinition"
+    $InstalledTeamApps = Get-MgBetaTeamInstalledApp -TeamId $teamId
         foreach($app in $InstalledTeamApps) {
-            $TeamDef = Get-MgBetaTeamInstalledAppTeamAppDefinition -TeamId $teamId -TeamsAppInstallationId "$($app.id)" -Property "*" | where-object {$_.DisplayName -eq "Incoming Webhook (to be retired)"}
+            Write-Output "[$((Get-Date).TimeofDay)] [INFO] Checking App: $($app.id) in Team: $($team.DisplayName)"
+            $TeamDef = Get-MgBetaTeamInstalledAppTeamAppDefinition -TeamId $teamId -TeamsAppInstallationId "$($app.id)" -Property "*"
+            Write-Output "[$((Get-Date).TimeofDay)] [INFO] App Check Complete for App: $($app.id) in Team: $($TeamDef.DisplayName)"
+            if ($($TeamDef.displayName) -like "Incoming Webhook*") {
+                Write-Output "[$((Get-Date).TimeofDay)] [INFO] Incoming Webhook App Found in Team: $($team.DisplayName)"
+                break
+            } else {
+                $TeamDef = $null
+            }
         }
 
     If($null -ne $TeamDef){
