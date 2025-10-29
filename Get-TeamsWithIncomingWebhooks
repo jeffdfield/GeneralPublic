@@ -52,7 +52,6 @@ $30MinFromNow = $Now.AddMinutes(30)
 
 $table = @()
 
-#Get all the teams
 $AllTeams = Get-MgBetaTeam -PageSize 999
 Write-Output "[$((Get-Date).TimeofDay)] [INFO] There are $($AllTeams.count) teams to process."
 [int]$teamCount = $AllTeams.count
@@ -60,13 +59,8 @@ Write-Output "[$((Get-Date).TimeofDay)] [INFO] There are $($AllTeams.count) team
 
 Foreach ($team in $AllTeams) {
 
-    $TeamOwners = $null
-    $Obj = $null
-    $TeamDef = $null
-    $combinedOwners = $null
-
-    #Sets up the re-authentication since it only lasts 60 ish minutes.
     $NowInLoop = Get-date
+
     If($NowInLoop -ge $30MinFromNow){
         $Now = Get-date
         Connect-2Graph
@@ -79,9 +73,15 @@ Foreach ($team in $AllTeams) {
 
     $teamId = $($team.Id)
 
+    $TeamOwners = $null
+    $Obj = $null
+    $TeamDef = $null
+    $combinedOwners = $null
+    $Obj = New-Object PSObject
+
+
     $InstalledTeamApps = Get-MgBetaTeamInstalledApp -TeamId $teamId -Property "*" -ExpandProperty "teamsAppDefinition"
         foreach($app in $InstalledTeamApps) {
-            $Obj = New-Object PSObject
             $TeamDef = Get-MgBetaTeamInstalledAppTeamAppDefinition -TeamId $teamId -TeamsAppInstallationId "$($app.id)" -Property "*" | where-object {$_.DisplayName -eq "Incoming Webhook (to be retired)"}
         }
 
@@ -94,14 +94,14 @@ Foreach ($team in $AllTeams) {
             $combinedOwners = $combinedOwners + "; " + $($UserDetails.Mail)
         }
 
-
         $Obj | Add-Member -MemberType NoteProperty -Name "TeamName" -Value $($team.displayName)
         $Obj | Add-Member -MemberType NoteProperty -Name "TeamID" -Value $teamId
         $Obj | Add-Member -MemberType NoteProperty -Name "Owners" -Value $combinedOwners
-        $Obj | Add-Member -MemberType NoteProperty -Name "AppName" -Value $TeamDef.displayName
-        $Obj | Add-Member -MemberType NoteProperty -Name "Version" -Value $TeamDef.version
-        $Obj | Add-Member -MemberType NoteProperty -Name "Description" -Value $TeamDef.description
-        $table += $Obj 
+        $Obj | Add-Member -MemberType NoteProperty -Name "AppName" -Value $($TeamDef.displayName)
+        $Obj | Add-Member -MemberType NoteProperty -Name "Version" -Value $($TeamDef.version)
+        $Obj | Add-Member -MemberType NoteProperty -Name "Description" -Value $($TeamDef.description)
+        $table += $Obj
+
     }else{
         Write-Output "[$((Get-Date).TimeofDay)] [INFO] No Incoming Webhook App in Team: $($team.DisplayName)"
     }
