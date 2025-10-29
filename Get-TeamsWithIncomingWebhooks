@@ -54,7 +54,7 @@ $table = @()
 
 $AllTeams = Get-MgBetaTeam -PageSize 999
 
-$AllTeams = Get-MgBetaTeam -TeamId "03d72b58-a521-47f9-81fd-f258442c345a"
+$AllTeams = Get-MgBetaTeam -all -pagesize 999
 Write-Output "[$((Get-Date).TimeofDay)] [INFO] There are $($AllTeams.count) teams to proce03d72b58-a521-47f9-81fd-f258442c345ass."
 [int]$teamCount = $AllTeams.count
 
