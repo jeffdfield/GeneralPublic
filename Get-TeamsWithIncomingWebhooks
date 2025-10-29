@@ -1,0 +1,114 @@
+<#
+.SYNOPSIS
+  Gets all Microsoft Teams with Incoming Webhooks
+.DESCRIPTION
+  Gets all Microsoft Teams with Incoming Webhooks
+.PARAMETER <Parameter_Name>
+    Requires an app with the app registration secrets
+.INPUTS
+  Requires an app with the app registration secrets
+.OUTPUTS
+  Outputs PSObject and a CSV
+.NOTES
+  Version:        1.0
+  Author:         Jeffery Field (jeffdfield@gmail.com)
+  Creation Date:  10/29/2025
+  Purpose/Change: Initial script development
+.EXAMPLE
+  
+#>
+
+function Connect-2Graph {
+        [CmdletBinding()]
+        param (
+        [string] $TenantId = "",
+        [string] $ClientId = "",
+        [string] $AppSecret = '',
+        [string] $authority = 'https://login.windows.net/$TenantId',
+        [string] $TenantName = ""
+        )
+
+            $Global:ReqTokenBody = @{
+                Grant_Type    = "client_credentials"
+                Scope         = "https://graph.microsoft.com/.default"
+                client_Id     = $clientID
+                Client_Secret = $AppSecret
+                } 
+
+            $Global:TokenResponse = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$TenantName/oauth2/v2.0/token" -Method POST -Body $ReqTokenBody
+                if($TokenResponse -ne $null){
+                    Connect-MgGraph -AccessToken ($TokenResponse.access_token | ConvertTo-SecureString -AsPlainText -Force)
+
+              }else{throw "Could NOT connect to Graph"}
+            
+}
+
+Connect-2Graph
+
+#Authenticates every 30 minutes so we don't time out
+$Now = Get-date
+$30MinFromNow = $Now.AddMinutes(30)
+
+
+$table = @()
+
+#Get all the teams
+$AllTeams = Get-MgBetaTeam -PageSize 999
+Write-Output "[$((Get-Date).TimeofDay)] [INFO] There are $($AllTeams.count) teams to process."
+[int]$teamCount = $AllTeams.count
+
+
+Foreach ($team in $AllTeams) {
+
+    $TeamOwners = $null
+    $Obj = $null
+    $TeamDef = $null
+    $combinedOwners = $null
+
+    #Sets up the re-authentication since it only lasts 60 ish minutes.
+    $NowInLoop = Get-date
+    If($NowInLoop -ge $30MinFromNow){
+        $Now = Get-date
+        Connect-2Graph
+        $30MinFromNow = $Now.AddMinutes(30)
+    }
+
+    $teamCount = $teamCount -1
+    Write-Output "[$((Get-Date).TimeofDay)] [INFO] $teamCount teams left to process."
+    Write-Output "[$((Get-Date).TimeofDay)] [INFO] Processing Team: $($team.DisplayName)"
+
+    $teamId = $($team.Id)
+
+    $InstalledTeamApps = Get-MgBetaTeamInstalledApp -TeamId $teamId -Property "*" -ExpandProperty "teamsAppDefinition"
+        foreach($app in $InstalledTeamApps) {
+            $Obj = New-Object PSObject
+            $TeamDef = Get-MgBetaTeamInstalledAppTeamAppDefinition -TeamId $teamId -TeamsAppInstallationId "$($app.id)" -Property "*" | where-object {$_.DisplayName -eq "Incoming Webhook (to be retired)"}
+        }
+
+    If($null -ne $TeamDef){
+        Write-Output "[$((Get-Date).TimeofDay)] [INFO] Found Incoming Webhook App in Team: $($team.DisplayName)"
+        $TeamOwners = Get-MgTeamMember -TeamId "$teamId" | where-object {$_.Roles -contains "owner"}
+        Foreach($TeamOwner In $TeamOwners) {
+            Write-Output "[$((Get-Date).TimeofDay)] [INFO] Finding owner details for $($TeamOwner.DisplayName)"
+            $UserDetails = Get-MgUser -Filter "displayName eq '$($TeamOwner.DisplayName)'"
+            $combinedOwners = $combinedOwners + "; " + $($UserDetails.Mail)
+        }
+
+
+        $Obj | Add-Member -MemberType NoteProperty -Name "TeamName" -Value $($team.displayName)
+        $Obj | Add-Member -MemberType NoteProperty -Name "TeamID" -Value $teamId
+        $Obj | Add-Member -MemberType NoteProperty -Name "Owners" -Value $combinedOwners
+        $Obj | Add-Member -MemberType NoteProperty -Name "AppName" -Value $TeamDef.displayName
+        $Obj | Add-Member -MemberType NoteProperty -Name "Version" -Value $TeamDef.version
+        $Obj | Add-Member -MemberType NoteProperty -Name "Description" -Value $TeamDef.description
+        $table += $Obj 
+    }else{
+        Write-Output "[$((Get-Date).TimeofDay)] [INFO] No Incoming Webhook App in Team: $($team.DisplayName)"
+    }
+
+}
+
+
+$table | Out-GridView
+$table | Export-Csv -Path "C:\Temp\TeamsApps.csv" -NoTypeInformation -Encoding UTF8
+
