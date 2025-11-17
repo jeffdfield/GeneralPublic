@@ -1,0 +1,15 @@
+Try{
+    Write-Output "[$((Get-Date).TimeofDay)] [INFO] Unhiding power plan settings and setting power plan."
+
+    #Will expose all hidden power plan settings in the power options control panel.
+    (Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerSettings' -Recurse).Name -notmatch '\bDefaultPowerSchemeValues|(\\[0-9]|\b255)$' | % {sp $_.Replace('HKEY_LOCAL_MACHINE','HKLM:') -Name 'Attributes' -Value 2 -Force}
+
+    $Scheme = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+    $scheme = $scheme -split '\s+'
+    $SchemeGuid = $scheme[3]
+    powercfg -setactive $SchemeGuid
+    Write-Output "[$((Get-Date).TimeofDay)] [INFO] Unhid power plan settings and set power plan to ulimate performance."
+    
+}Catch{
+    Write-Output "[$((Get-Date).TimeofDay)] [ERROR] Could not unhide power plan settings. $_"
+}
